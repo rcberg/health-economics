@@ -19,7 +19,7 @@ library(scales)
 library(htmltools)
 
 suicide_data <- 
-  read_csv("D:/Economics/Projects/medicaid/data/raw/cdc_wonder_suicide_raw.csv") %>%
+  read_csv("D:/Economics/Projects/health-economics/data/raw/cdc_wonder_suicide_raw.csv") %>%
   clean_names() %>%
   filter( is.na(notes) == F & is.na(year)==F & state_code != 11 ) %>%
   select(-c("cause_of_death",
