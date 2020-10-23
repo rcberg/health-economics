@@ -1,0 +1,119 @@
+---
+title: "Interactive: U.S. Suicide trends over time"
+author: "R. Chris Berg"
+output: 
+  html_document: 
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(janitor)
+library(ggplot2)
+library(plotly)
+library(hrbrthemes)
+library(sf)
+library(albersusa)
+library(scales)
+library(htmltools)
+
+suicide_data <- 
+  read_csv("D:/Economics/Projects/medicaid/data/raw/cdc_wonder_suicide_raw.csv") %>%
+  clean_names() %>%
+  filter( is.na(notes) == F & is.na(year)==F & state_code != 11 ) %>%
+  select(-c("cause_of_death",
+            "cause_of_death_code",
+            "notes")) %>%
+  mutate( across(-state, as.numeric))
+
+state_suicide_2000 <- 
+  suicide_data %>%
+  filter( year == 2000)%>%
+  select( state, age_adjusted_rate ) %>%
+  rename("name"="state",
+         "adj_rate_2000"="age_adjusted_rate")
+
+state_suicide_2018 <- 
+  suicide_data %>%
+  filter( year == 2018)%>%
+  select( state, age_adjusted_rate ) %>%
+  rename("name"="state",
+         "adj_rate_2018"="age_adjusted_rate")
+
+state_suicide_growth_df <- 
+  left_join(state_suicide_2000,state_suicide_2018) %>%
+  mutate( suicide_rate_growth = round(100*(adj_rate_2018/adj_rate_2000-1),
+                                      2)
+          )
+us_map_sf <- 
+  st_as_sf(usa_composite(proj = "laea")) %>%
+  select( name, geo_id, geometry ) %>%
+  merge(state_suicide_growth_df)
+
+```
+
+*The data used here comes from the Centers for Disease Control [WONDER Database](https://wonder.cdc.gov/).*
+
+## Suicide in the United States, 1999-2018
+
+The United States has been experiencing a drastic increase in the rate of suicide, with over 1 in 10,000 US citizens dying by some form of suicide in 2018. 
+
+```{r national_rate, echo=F, message=F, dpi=300}
+suicide_data %>% 
+  group_by(year) %>%
+  summarise( pop = sum(population) ,
+             suicides = sum(deaths) ) %>%
+  mutate( crude_rate_total = (suicides/pop)*100000 
+          ) %>%
+  ggplot( aes( x = year , 
+             y = crude_rate_total ) ) + 
+  geom_line( size = 1 ,
+          color = 'red') + 
+  labs( title = "United States suicide rate over time",
+        caption = "(Data from the CDC WONDER Database)",
+        x = "Year" , 
+        y = "Deaths per 100,000 population")+
+  theme_ipsum_rc()
+```
+
+Despite [public concern](https://www.usatoday.com/story/news/nation/2020/01/30/u-s-suicide-rate-rose-again-2018-how-can-suicide-prevention-save-lives/4616479002/), a 2017 meta-analysis published in [the American Psychological Association's "Psychological Bulletin"](https://psycnet.apa.org/record/2016-54856-001) notes that "...predictive ability has not improved across 50 years of research;" which leaves researchers and practitioners with few tools to reverse course.
+
+## Suicide rate among states, 1999-2018
+
+Below is an interactive chart which shows the trend in the age-adjusted suicide rate for each state. You can hover-over the line for a particular state and a box will pop-up showing which state you're looking at, and what their age-adjusted suicide rate was for the given year.
+
+To pull-up the line graph for a specific state, double-click the state name in the legend. Click (once) on any additional states to compare their trends.
+
+```{r states_interactive, echo=FALSE, dpi=120}
+state_rate_plot <- 
+  ggplot( data = suicide_data , 
+          aes(x = year , y = age_adjusted_rate , color = state )
+          ) +
+  geom_line() +
+  labs( title = "Suicide rate by state",
+        x = "Year" , 
+        y = "Deaths per 100,000 population",
+        color="State") +
+  theme_ipsum_rc()
+
+ggplotly(state_rate_plot)
+```
+
+## Geographic distribution of suicide rate trends
+
+Which states have seen the largest increases since the year 2000? Below is an interactive map showing the percentage growth in the (age-adjusted) number of suicide deaths per 100,000 citizens of a state. Lighter colors indicate a higher percentage growth since 2000.
+
+```{r map_interactive, echo=FALSE, warning=F, message=F,dpi=120}
+
+state_suicide_growth_dist <- 
+  ggplot( data = us_map_sf , 
+          ) +
+  geom_sf(aes( fill = suicide_rate_growth , label=name) , col="white") +
+  scale_fill_viridis_c(name="Percent change <br> 2000-2018",
+                       labels = scales::label_percent(scale=1))+
+  ggtitle("Geography of suicide rate trends") +
+  theme_ipsum_rc()
+
+ggplotly(state_suicide_growth_dist)
+```
